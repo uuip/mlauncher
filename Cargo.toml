@@ -4,13 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.97"
-crossbeam-channel = "0.5.14"
-ctrlc = { version = "3.4.5", features = ["termination"] }
-netdev = "0.33.0"
+anyhow = "1.0.98"
+crossbeam-channel = "0.5.15"
+ctrlc = { version = "3.4.6", features = ["termination"] }
+netdev = "0.34.0"
 regex = "1.11.1"
-log = { version = "0.4.26", features = ["release_max_level_info"] }
-env_logger = { version = "0.11.7" }
+log = { version = "0.4.27", features = ["release_max_level_info"] }
+env_logger = { version = "0.11.8" }
 
 [profile.release]
 lto = true
