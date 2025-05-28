@@ -1,15 +1,13 @@
+use crate::logger::init_logger;
 use anyhow::Context;
-use crossbeam_channel::{unbounded, Sender};
-use log::{error, info, log, warn, Level};
+use duct::cmd;
+use log::{Level, error, info, log, warn};
 use regex::Regex;
 use std::collections::HashMap;
+use std::env;
 use std::io::{BufRead, BufReader};
-use std::process::{Child, Command, Stdio};
-use std::sync::{Arc, LazyLock, Mutex};
-use std::{env, thread};
-
-use crate::logger::init_logger;
-
+use std::process::Command;
+use std::sync::{Arc, LazyLock};
 mod logger;
 
 static LOG_LEVEL: LazyLock<HashMap<&'static str, Level>> = LazyLock::new(|| {
@@ -36,73 +34,37 @@ fn main() -> anyhow::Result<()> {
     init_logger();
     let _dns_guard = DnsGuard;
     let cwd = env::current_dir().context("Failed to get current directory")?;
-    let child = Command::new("./mihomo-darwin-arm64")
-        .current_dir(&cwd)
-        .arg("-d")
-        .arg(".")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
+    let child = cmd!("./mihomo-darwin-arm64", "-d", ".")
+        .dir(&cwd)
+        .stderr_to_stdout()
+        .reader()
         .with_context(|| format!("无法启动 mihomo (当前目录: {})", cwd.display()))?;
 
-    let child_arc = Arc::new(Mutex::new(child));
+    let child_arc = Arc::new(child);
 
-    let child_for_signal = child_arc.clone();
-    ctrlc::set_handler(move || {
-        let mut child_guard = child_for_signal.lock().unwrap();
-        match child_guard.try_wait() {
-            Ok(Some(status)) => info!("子进程已退出，状态: {}", status),
-            Ok(None) => {
-                info!("终止子进程...");
-                if let Err(e) = child_guard.kill() {
-                    error!("终止子进程失败: {}", e);
-                }
+    let child_guard = child_arc.clone();
+    ctrlc::set_handler(move || match child_guard.try_wait() {
+        Ok(Some(_)) => info!("子进程已退出，状态"),
+        Ok(None) => {
+            info!("终止子进程...");
+            if let Err(e) = child_guard.kill() {
+                error!("终止子进程失败: {}", e);
             }
-            Err(e) => error!("error attempting to wait: {e}"),
         }
+        Err(e) => error!("error attempting to wait: {e}"),
     })?;
 
-    let (sender, receiver) = unbounded();
-    let child_lock = child_arc.clone();
-    thread::spawn(move || handle_output(child_lock, sender));
-
-    thread::spawn(move || {
-        for line in receiver {
-            if line.contains("[TUN] Tun adapter listening at: utun") {
-                thread::spawn(|| {
-                    warn!("检测到关键词，正在设置 DNS...");
-                    set_dns("198.18.0.2");
-                });
-            }
-            log(&line);
+    let reader = child_arc.clone();
+    let lines = BufReader::new(&*reader).lines();
+    for line in lines.map_while(Result::ok) {
+        if line.contains("[TUN] Tun adapter listening at: utun") {
+            warn!("检测到关键词，正在设置 DNS...");
+            set_dns("198.18.0.2");
         }
-    })
-    .join()
-    .unwrap();
+        log(&line);
+    }
 
     Ok(())
-}
-
-fn handle_output(child_arc: Arc<Mutex<Child>>, sender: Sender<String>) {
-    let mut child = child_arc.lock().unwrap();
-    let stdout = child.stdout.take().expect("Failed to get stdout");
-    let stderr = child.stderr.take().expect("Failed to get stderr");
-    let sender_stdout = sender.clone();
-    let sender_stderr = sender;
-    let handle_stdout = thread::spawn(move || read_pipe(stdout, sender_stdout));
-    let handle_stderr = thread::spawn(move || read_pipe(stderr, sender_stderr));
-
-    handle_stdout.join().unwrap();
-    handle_stderr.join().unwrap();
-}
-
-fn read_pipe<R: std::io::Read>(pipe: R, sender: Sender<String>) {
-    let reader = BufReader::new(pipe);
-    for line in reader.lines().map_while(Result::ok) {
-        if sender.send(line).is_err() {
-            break;
-        }
-    }
 }
 
 fn set_dns(dns: &str) {
