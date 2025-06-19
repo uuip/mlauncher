@@ -88,11 +88,10 @@ fn get_friendly_name() -> Option<String> {
 
 fn log(s: &str) {
     if let Some(caps) = RE.captures(s) {
-        let time = format!("{}.{}{}", &caps[1], &caps[2], &caps[3]);
         let level = &caps[4];
         let level = *LOG_LEVEL.get(level).unwrap_or(&Level::Info);
         let msg = &caps[5];
 
-        log!(level, "{} {}", time, msg);
+        log!(level, "{}.{}{} {}", &caps[1], &caps[2], &caps[3], msg);
     }
 }
