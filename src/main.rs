@@ -1,7 +1,7 @@
 use crate::logger::init_logger;
 use anyhow::Context;
 use duct::cmd;
-use log::{Level, error, info, log, warn};
+use log::{Level, error, info, log};
 use regex::Regex;
 use std::collections::HashMap;
 use std::env;
@@ -26,6 +26,7 @@ static RE: LazyLock<Regex> = LazyLock::new(|| {
 struct DnsGuard;
 impl Drop for DnsGuard {
     fn drop(&mut self) {
+        info!("Restoring DNS...");
         set_dns("empty");
     }
 }
@@ -38,17 +39,22 @@ fn main() -> anyhow::Result<()> {
         .dir(&cwd)
         .stderr_to_stdout()
         .reader()
-        .with_context(|| format!("无法启动 mihomo (当前目录: {})", cwd.display()))?;
+        .with_context(|| {
+            format!(
+                "Failed to start mihomo (current directory: {})",
+                cwd.display()
+            )
+        })?;
 
     let child_arc = Arc::new(child);
 
     let child_guard = child_arc.clone();
     ctrlc::set_handler(move || match child_guard.try_wait() {
-        Ok(Some(_)) => info!("子进程已退出，状态"),
+        Ok(Some(_)) => info!("Child process has exited"),
         Ok(None) => {
-            info!("终止子进程...");
+            info!("Terminating child process...");
             if let Err(e) = child_guard.kill() {
-                error!("终止子进程失败: {}", e);
+                error!("Failed to terminate child process: {}", e);
             }
         }
         Err(e) => error!("error attempting to wait: {e}"),
@@ -58,7 +64,7 @@ fn main() -> anyhow::Result<()> {
     let lines = BufReader::new(&*reader).lines();
     for line in lines.map_while(Result::ok) {
         if line.contains("[TUN] Tun adapter listening at: utun") {
-            warn!("检测到关键词，正在设置 DNS...");
+            info!("Keyword detected, setting DNS...");
             set_dns("198.18.0.2");
         }
         log(&line);
@@ -73,7 +79,7 @@ fn set_dns(dns: &str) {
             .args(["-setdnsservers", &interface, dns])
             .status();
         if let Err(e) = status {
-            error!("DNS 设置失败: {}", e);
+            error!("Failed to set DNS: {}", e);
         }
     }
 }
