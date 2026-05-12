@@ -63,11 +63,11 @@ fn main() -> anyhow::Result<()> {
     let reader = child_arc.clone();
     let lines = BufReader::new(&*reader).lines();
     for line in lines.map_while(Result::ok) {
-        if line.contains("[TUN] Tun adapter listening at: utun") {
+        log(&line);
+        if line.contains("[TUN] default interface changed by monitor") {
             info!("Keyword detected, setting DNS...");
             set_dns("198.18.0.2");
         }
-        log(&line);
     }
 
     Ok(())
