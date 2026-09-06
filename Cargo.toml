@@ -4,16 +4,14 @@ version = "0.1.1"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.102"
+anyhow = "1.0.104"
 ctrlc = { version = "3.5.2", features = ["termination"] }
-netdev = "0.43.0"
-regex = "1.12.3"
-log = { version = "0.4.29", features = ["release_max_level_info"] }
-env_logger = "0.11.10"
-duct = "1.1.1"
+netdev = { version = "0.46.2", default-features = false, features = ["gateway"] }
+regex = "1.13.1"
+log = { version = "0.4.34", features = ["release_max_level_info"] }
+env_logger = { version = "0.11.11", default-features = false, features = ["auto-color", "regex"] }
+duct = { version = "1.1.2", default-features = false }
 
 [profile.release]
 lto = true
 strip = true
-codegen-units = 1
-panic = "abort"

@@ -1,27 +1,12 @@
-use crate::logger::init_logger;
+use crate::logger::{init_logger, log_mihomo_line};
 use anyhow::Context;
 use duct::cmd;
-use log::{Level, error, info, log};
-use regex::Regex;
-use std::collections::HashMap;
+use log::{error, info};
 use std::env;
 use std::io::{BufRead, BufReader};
 use std::process::Command;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 mod logger;
-
-static LOG_LEVEL: LazyLock<HashMap<&'static str, Level>> = LazyLock::new(|| {
-    let mapper: [(&str, Level); 4] = [
-        ("debug", Level::Debug),
-        ("info", Level::Info),
-        ("warning", Level::Warn),
-        ("error", Level::Error),
-    ];
-    HashMap::from(mapper)
-});
-static RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"time="(.*?)\.(\d{3})\d*([+-]\d{2}:\d{2})"\s+level=(\w+)\s+msg="(.*?)""#).unwrap()
-});
 
 struct DnsGuard;
 impl Drop for DnsGuard {
@@ -60,10 +45,9 @@ fn main() -> anyhow::Result<()> {
         Err(e) => error!("error attempting to wait: {e}"),
     })?;
 
-    let reader = child_arc.clone();
-    let lines = BufReader::new(&*reader).lines();
+    let lines = BufReader::new(child_arc.as_ref()).lines();
     for line in lines.map_while(Result::ok) {
-        log(&line);
+        log_mihomo_line(&line);
         if line.contains("[TUN] default interface changed by monitor") {
             info!("Keyword detected, setting DNS...");
             set_dns("198.18.0.2");
@@ -90,14 +74,4 @@ fn get_friendly_name() -> Option<String> {
         .into_iter()
         .find(|i| i.is_physical() && !i.ipv4.is_empty() && i.gateway.is_some())
         .and_then(|interface| interface.friendly_name)
-}
-
-fn log(s: &str) {
-    if let Some(caps) = RE.captures(s) {
-        let level = &caps[4];
-        let level = *LOG_LEVEL.get(level).unwrap_or(&Level::Info);
-        let msg = &caps[5];
-
-        log!(level, "{}.{}{} {}", &caps[1], &caps[2], &caps[3], msg);
-    }
 }
