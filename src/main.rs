@@ -39,7 +39,7 @@ fn main() -> anyhow::Result<()> {
         Ok(None) => {
             info!("Terminating child process...");
             if let Err(e) = child_guard.kill() {
-                error!("Failed to terminate child process: {}", e);
+                error!("Failed to terminate child process: {e}");
             }
         }
         Err(e) => error!("error attempting to wait: {e}"),
@@ -63,7 +63,7 @@ fn set_dns(dns: &str) {
             .args(["-setdnsservers", &interface, dns])
             .status();
         if let Err(e) = status {
-            error!("Failed to set DNS: {}", e);
+            error!("Failed to set DNS: {e}");
         }
     }
 }
