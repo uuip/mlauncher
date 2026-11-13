@@ -4,21 +4,17 @@ use duct::cmd;
 use log::{error, info};
 use std::env;
 use std::io::{BufRead, BufReader};
+use std::mem::DropGuard;
 use std::process::Command;
 use std::sync::Arc;
 mod logger;
 
-struct DnsGuard;
-impl Drop for DnsGuard {
-    fn drop(&mut self) {
-        info!("Restoring DNS...");
-        set_dns("empty");
-    }
-}
-
 fn main() -> anyhow::Result<()> {
     init_logger();
-    let _dns_guard = DnsGuard;
+    let _dns_guard = DropGuard::new((), |()| {
+        info!("Restoring DNS...");
+        set_dns("empty");
+    });
     let cwd = env::current_dir().context("Failed to get current directory")?;
     let child = cmd!("./mihomo-darwin-arm64", "-d", ".")
         .dir(&cwd)
